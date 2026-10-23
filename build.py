@@ -17,12 +17,11 @@ import argparse, csv, os, re, shutil, struct, subprocess, sys, time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[1]
 SOURCE = HERE / 'source'
 LIB = HERE / 'lib'
-BORLAND = Path('/Users/kitrinx/workspace/Ultima/borland/bcpp31/BCPP31')
-PHARLAP = ROOT / 'references/pharlap-286-dos-extender-sdk/extracted'
-ORIGINAL = ROOT / 'references/ULTIMA8-game/U8.EXE'
+BORLAND = HERE / 'out/tools/BC'
+PHARLAP = HERE / 'toolchain/pharlap'
+ORIGINAL = HERE / 'original/U8.EXE'
 
 BORLAND_BIN = ('BCC.EXE', 'DPMI16BI.OVL', 'DPMILOAD.EXE', 'DPMIMEM.DLL', 'TLINK.EXE', 'TLIB.EXE', 'TASM.EXE',
                'IMPLIB.EXE')
@@ -31,9 +30,9 @@ DOS_DIRS = {'_lib': '_LIB'}
 CC_FLAGS = ('-c', '-ml', '-DDOSX286')
 ASM_FLAGS = ('/ml', '/m5')
 
-# MAIN.C records __DATE__ and __TIME__: Feb 10 1995 16:02:44. DOSBox-X reads a set time back about
+# MAIN.C records __DATE__ and __TIME__: Nov 18 1995 10:28:46. DOSBox-X reads a set time back about
 # a second early and the clock runs on while BCC starts, so the stamp is checked and retried.
-BUILD_CLOCK = {'MAIN': ('02/10/1995', '16:02:45', b'Feb 10 1995\x0016:02:44')}
+BUILD_CLOCK = {'MAIN': ('11/18/1995', '10:28:47', b'Nov 18 1995\x0010:28:46')}
 # Debug records as the original debug data shows them. Only these C modules were compiled with line
 # numbers (`-y` in their flags line); the others reached the link through a TLIB library, which
 # names a module after its file, and these through one built with /0, which drops every
@@ -267,6 +266,15 @@ def bind(app, extender):
 	return bytes(ext + image)
 
 
+def strip_tdinfo(app):
+	"""Reproduce GOG's stripped 2.13 executable and its empty CodeView header."""
+	debug = app.rfind(b'\xfbR')
+	if debug < 0:
+		raise ValueError('TDINFO debug data not found')
+	# The bytes before TDINFO already end with GOG's empty 16-byte NB02 header.
+	return app[:debug]
+
+
 # ------------------------------------------------------------------ compare
 
 def ne_parts(d):
@@ -328,6 +336,7 @@ def main():
 	ap.add_argument('--out', default=str(HERE / 'out'))
 	ap.add_argument('--original', default=str(ORIGINAL), help='U8.EXE to compare with')
 	ap.add_argument('--no-compare', action='store_true')
+	ap.add_argument('--strip-tdinfo', action='store_true', help='match GOG 2.13 by removing TDINFO debug data')
 	ap.add_argument('--link-only', action='store_true', help='reuse the objects in out/dos/OBJ')
 	args = ap.parse_args()
 	out = Path(args.out).resolve()
@@ -378,6 +387,9 @@ def main():
 	shutil.copyfile(work / 'U8.MAP', out / 'U8.MAP')
 
 	exe = bind((work / 'U8.EXE').read_bytes(), (LIB / 'RUN286B.EXE').read_bytes())
+	if args.strip_tdinfo:
+		(out / 'U8-TDINFO.EXE').write_bytes(exe)
+		exe = strip_tdinfo(exe)
 	(out / 'U8.EXE').write_bytes(exe)
 	print(f'wrote {out / "U8.EXE"} ({len(exe)} bytes)')
 	if not args.no_compare:

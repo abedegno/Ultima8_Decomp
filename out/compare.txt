@@ -1,6 +1,5 @@
-identical: 290 of 291 parts
-whole file identical: False
-debug: 183329 bytes vs 182156, 135899 differing, first at 0x4
+identical: 291 of 291 parts
+whole file identical: True
 
 identical parts:
 extender
@@ -293,3 +292,4 @@ relocations/seg_147
 data/seg_148
 relocations/seg_148
 data/seg_149
+debug

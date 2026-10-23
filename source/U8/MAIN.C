@@ -22,7 +22,7 @@ unsigned long cheatcheck3 = 0;
 
 char DateOfBuild[] = __DATE__;
 char TimeOfBuild[] = __TIME__;
-char Version[] = "2.12";
+char Version[] = "2.13";
 char UsecodeVersion[] = "    ";
 char IntroVersion[] = "    ";
 char EndgameVersion[] = "    ";

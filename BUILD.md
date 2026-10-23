@@ -1,14 +1,15 @@
 # Building U8.EXE
 
-One command rebuilds Ultima 8's `U8.EXE` from the decompiled source and compares it with the
-shipped file, part by part.
+From this directory, one command rebuilds the GOG DOS 2.13 `U8.EXE` from decompiled source and
+compares it with the supplied original, part by part and as a whole file.
 
 ```sh
-python3 projects/U8/build.py
+python3 build.py --strip-tdinfo
 ```
 
-It takes about two minutes. The result is `out/U8.EXE`. It runs: in DOSBox-X it plays the intro, just
-like the original.
+It takes about two minutes. The result is `out/U8.EXE`; `out/U8-TDINFO.EXE` retains the linked
+Turbo Debugger information. The expected GOG result is 935,440 bytes with SHA-256
+`1b1f470832e699a1eb4521f485acba8f1e62b641492a61de5c8d2561b01f3f6f`.
 
 ## Prerequisites
 
@@ -16,9 +17,9 @@ like the original.
 |---|---|---|
 | Python 3.9 or later | `python3` | |
 | DOSBox-X (Homebrew `dosbox-x`) | on `PATH` | `--dosbox` |
-| Borland C++ 3.1 (`BIN`, `INCLUDE`) | `/Users/kitrinx/workspace/Ultima/borland/bcpp31/BCPP31` | `--borland` |
-| Phar Lap 286 SDK 3.0 (`disk1/BIN/GORUN286.EXE`, `disk1/INC`) | `references/pharlap-286-dos-extender-sdk/extracted` | `--pharlap` |
-| Original `U8.EXE`, for the comparison only | `references/ULTIMA8-game/U8.EXE` | `--original`, `--no-compare` |
+| Borland C++ 3.1 (`BIN`, `INCLUDE`) | `out/tools/BC` | `--borland` |
+| Phar Lap 286 SDK 3.0 components | `toolchain/pharlap` | `--pharlap` |
+| Original GOG 2.13 `U8.EXE`, for comparison only | `original/U8.EXE` | `--original`, `--no-compare` |
 
 From Borland the build uses `BCC`, `TASM`, `TLINK`, `TLIB`, `IMPLIB`, the DPMI files `BCC` needs,
 and the headers. Everything else it links comes from `lib/`.
@@ -33,8 +34,9 @@ lib/CL.LIB + lib/TMPL.LIB  --TLIB /0, Phar Lap's MKLIB steps----------->  BCL286
 lib/AILXMI.DEF  --IMPLIB---------------------------------------------->  AILXMI.LIB
 objects in lib/U8.LNK order + AILXMI, PHAPI, BCL286 + lib/U8.DEF
                 --TLINK /c /C /v /s /P=2048, MARKPHAR--------------------->  NE image (GORUN286 stub)
-lib/RUN286B.EXE + NE image  --bind------------------------------------->  out/U8.EXE
-out/U8.EXE vs original  --compare-------------------------------------->  out/compare.txt
+lib/RUN286B.EXE + NE image  --bind------------------------------------->  out/U8-TDINFO.EXE
+U8-TDINFO.EXE           --remove TDINFO with --strip-tdinfo----------->  out/U8.EXE
+out/U8.EXE vs GOG original  --compare---------------------------------->  out/compare.txt
 ```
 
 - **Compiling.** Each C module is compiled from the original build folder, `source/U8`, under the
@@ -52,7 +54,7 @@ out/U8.EXE vs original  --compare-------------------------------------->  out/co
   give the two NE relocations the original has.
 - **Clock and file times.** The DOS clock is pinned. Source files get the times (to the two-second
   step DOS keeps) recorded in the original debug data (`lib/SRCTIME.TSV`), or 1993-01-01. `MAIN.C` stores `__DATE__`/`__TIME__`, so
-  the build sets the clock to 10 Feb 1995 16:02:44 for it, checks the object and retries.
+  the build sets the clock to 18 Nov 1995 10:28:46 for it, checks the object and retries.
 - **Link order.** `lib/U8.LNK` is the TLINK response file. Its object order is the original's,
   taken from the segment layout and the debug data's module list. `/P=2048` packs code segments the
   way the original is packed. `/C` keeps import names case-sensitive (`_DosRealIntr`,
@@ -64,20 +66,20 @@ out/U8.EXE vs original  --compare-------------------------------------->  out/co
 
 ## Output
 
-`out/` holds `U8.EXE`, `U8.MAP` (TLINK's detailed map), `compile.log`, `link.log` and
-`compare.txt`. `out/dos/` is the DOS working tree (sources, stubs, response files, objects);
-`out/tools/` is the toolchain drive.
+`out/` holds the byte-exact `U8.EXE`, the unstripped `U8-TDINFO.EXE`, `U8.MAP` (TLINK's detailed
+map), `compile.log`, `link.log`, and `compare.txt`. `out/dos/` is the DOS working tree (sources,
+stubs, response files, objects); `out/tools/` is the toolchain drive.
 
 ## How it compares with the original
 
-`compare.txt` splits both files into multiple parts (extender,
-NE tables, each segment, each segment's relocations, debug data). 290 of 291 parts are
-identical: the extender, NE tables, all 147 code segments, all relocation tables, DGROUP and the
-stack segment. The one that differs:
+`compare.txt` splits both files into multiple parts: extender, NE tables, every segment, every
+relocation table, and debug data. For the GOG 2.13 target, all 291 parts are identical and
+`whole file identical: True` is required. `cmp out/U8.EXE original/U8.EXE` provides an independent
+whole-file check.
 
-| Part | Why it differs |
-|---|---|
-| debug data (TDINFO) | The module list matches except `GRAPHICS\CVRESTO.C` and `COLLIDE.C`, which have no code or data in U8.EXE and no source here. Line records follow the decompiled layout, which is not a target. Listed C modules compile through an include stub, so each names the stub (`D:\STUB\ITEM.C`) as its first file. No object is rewritten to hide either. |
+Without `--strip-tdinfo`, the linker retains Turbo Debugger information. Its line records follow
+the decompiled source layout and are not expected to match an original retail debug stream; this
+does not affect the stripped GOG comparison. The upstream 2.12 debug stream names
+`GRAPHICS\CVRESTO.C` and `COLLIDE.C`, which have no code or data in `U8.EXE` and no source here.
 
-For a closer look at one segment, `U8.MAP` lists every module's place, and the split tool's
-`segment_map.tsv` and `source_map.tsv` give the original's.
+For a closer look at one segment, `U8.MAP` lists every module's place.
